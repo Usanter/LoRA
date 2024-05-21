@@ -421,7 +421,7 @@ def main():
                         break
             else:
                 param.requires_grad = True
-        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        total_params = sum(p.numel() for n, p in model.named_parameters() if (p.requires_grad and "adapter" in n ))
         print("NUMBER PARAMETERS")
         print(total_params)
 

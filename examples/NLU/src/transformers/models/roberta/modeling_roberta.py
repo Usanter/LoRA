@@ -375,18 +375,30 @@ class RobertaOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.adapter_type = config.adapter_type
+        self.p_adapter = False
         if config.apply_adapter:
             self.adapter = Adapter(config.hidden_size, config.adapter_size, 'swish' if config.adapter_type == 'houlsby' else 'relu')
+        if config.apply_parallel_adapter:
+            self.adapter = Adapter(config.hidden_size, config.adapter_size, 'swish' if config.adapter_type == 'houlsby' else 'relu')
+            self.p_adapter = True
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         if hasattr(self, 'adapter'):
-            residual = hidden_states
-            if self.adapter_type == 'pfeiffer':
-                hidden_states = self.LayerNorm(hidden_states + input_tensor)
-            hidden_states = self.adapter(hidden_states, residual=residual)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+            if self.p_adapter:
+                adapter_states = self.adapter(input_tensor, residual=input_tensor)
+
+            else:
+                residual = hidden_states
+                if self.adapter_type == 'pfeiffer':
+                    hidden_states = self.LayerNorm(hidden_states + input_tensor)
+
+                hidden_states = self.adapter(hidden_states, residual=residual)
+        if self.p_adapter:
+            hidden_states = self.LayerNorm(hidden_states + input_tensor + adapter_states)
+        else:
+            hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
@@ -404,10 +416,6 @@ class RobertaLayer(nn.Module):
             self.crossattention = RobertaAttention(config)
         self.intermediate = RobertaIntermediate(config)
         self.output = RobertaOutput(config)
-        self.p_adpt = False
-        if config.apply_parallel_adapter:
-            self.adapter = Adapter(config.hidden_size, config.adapter_size, 'swish')
-            self.p_adpt = True
 
     def forward(
         self,
@@ -462,16 +470,11 @@ class RobertaLayer(nn.Module):
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Compute parallel adapter output here
-        if self.p_adpt:
-            adapter_out = self.adapter(attention_output, residual=attention_output)
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        if self.p_adpt: # Add the parallel Adapter output
-            outputs = (layer_output + adapter_out,) + outputs
-        else:
-            outputs = (layer_output,) + outputs
+        outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
