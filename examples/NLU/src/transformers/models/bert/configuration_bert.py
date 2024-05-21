@@ -151,6 +151,7 @@ class BertConfig(PretrainedConfig):
         lora_alpha=None,
         lora_r=None,
         apply_adapter=False,
+        apply_parallel_adapter=False,
         adapter_type=None,
         adapter_size=None,
         **kwargs
@@ -176,5 +177,6 @@ class BertConfig(PretrainedConfig):
         self.lora_alpha = lora_alpha
         self.lora_r = lora_r
         self.apply_adapter = apply_adapter
+        self.apply_parallel_adapter = apply_parallel_adapter
         self.adapter_type = adapter_type
         self.adapter_size = adapter_size

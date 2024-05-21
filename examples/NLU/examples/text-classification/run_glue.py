@@ -193,6 +193,10 @@ class ModelArguments:
         default=False,
         metadata={"help": "Whether to apply adapter or not."},
     )
+    apply_parallel_adapter: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to apply parallel adapter or not."},
+    )
     adapter_path: Optional[str] = field(
         default=None,
         metadata={"help": "The file path of adapter parameters."},
@@ -218,7 +222,7 @@ class ModelArguments:
         metadata={"help": "Token Masking Probability"},
     )
 
-    
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -354,6 +358,7 @@ def main():
         lora_alpha=model_args.lora_alpha,
         lora_r=model_args.lora_r,
         apply_adapter=model_args.apply_adapter,
+        apply_parallel_adapter=model_args.apply_parallel_adapter,
         adapter_type=model_args.adapter_type,
         adapter_size=model_args.adapter_size,
         reg_loss_wgt=model_args.reg_loss_wgt,
@@ -384,7 +389,7 @@ def main():
             model.load_state_dict(lora_state_dict, strict=False)
         trainable_params.append('lora')
 
-    if model_args.apply_adapter:
+    if model_args.apply_adapter or model_args.apply_parallel_adapter:
         if model_args.adapter_path is not None:
             adapter_state_dict = torch.load(os.path.join(model_args.adapter_path, 'pytorch_adapter.bin'))
             head_state_dict = torch.load(os.path.join(model_args.adapter_path, 'pytorch_model_head.bin'))
@@ -416,6 +421,9 @@ def main():
                         break
             else:
                 param.requires_grad = True
+        total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print("NUMBER PARAMETERS")
+        print(total_params)
 
     # Preprocessing the datasets
     if data_args.task_name is not None:

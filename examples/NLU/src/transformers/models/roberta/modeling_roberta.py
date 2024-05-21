@@ -166,7 +166,7 @@ class RobertaSelfAttention(nn.Module):
             self.query = lora.Linear(config.hidden_size, self.all_head_size, config.lora_r, lora_alpha=config.lora_alpha)
         else:
             self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        
+
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
 
         if config.apply_lora:
@@ -404,6 +404,10 @@ class RobertaLayer(nn.Module):
             self.crossattention = RobertaAttention(config)
         self.intermediate = RobertaIntermediate(config)
         self.output = RobertaOutput(config)
+        self.p_adpt = False
+        if config.apply_parallel_adapter:
+            self.adapter = Adapter(config.hidden_size, config.adapter_size, 'swish')
+            self.p_adpt = True
 
     def forward(
         self,
@@ -457,10 +461,17 @@ class RobertaLayer(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
+        # Compute parallel adapter output here
+        if self.p_adpt:
+            adapter_out = self.adapter(attention_output, residual=attention_output)
+
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
+        if self.p_adpt: # Add the parallel Adapter output
+            outputs = (layer_output + adapter_out,) + outputs
+        else:
+            outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
