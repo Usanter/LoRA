@@ -1,8 +1,8 @@
 export num_gpus=2
 export CUBLAS_WORKSPACE_CONFIG=":16:8" # https://docs.nvidia.com/cuda/cublas/index.html#cublasApi_reproducibility
 export PYTHONHASHSEED=0
-export output_dir="./output_dir/adapter_parallel_roberta_large_mnli"
-python -m torch.distributed.launch --nproc_per_node=$num_gpus \
+export output_dir="./output_dir/adapter_parallel_roberta_large_mnli_layernorm_10epochs_minusinputtensor"
+python -m torch.distributed.launch --nproc_per_node=$num_gpus --master_port 47769  \
 examples/text-classification/run_glue.py \
 --model_name_or_path roberta-large \
 --task_name mnli \
@@ -14,7 +14,7 @@ examples/text-classification/run_glue.py \
 --per_device_train_batch_size 32 \
 --per_device_eval_batch_size 32 \
 --learning_rate 3e-4 \
---num_train_epochs 5 \
+--num_train_epochs 10 \
 --output_dir $output_dir/model \
 --overwrite_output_dir \
 --logging_steps 10 \
